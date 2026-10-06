@@ -9,11 +9,22 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "it.fabio.hello"
+        applicationId = "it.fabio.gufometronomo"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
+    }
+
+    // Chiave fissa SOLO per le prove di laboratorio (non è segreta):
+    // serve perché ogni nuova versione si installi sopra la precedente.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("lab.keystore")
+            storePassword = "android"
+            keyAlias = "lab"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
