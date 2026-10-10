@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "it.fabio.hello"
+    namespace = "it.fabio.musilab"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "it.fabio.gufometronomo"
+        applicationId = "it.fabio.musilab"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
     }
 
     // Chiave fissa SOLO per le prove di laboratorio (non è segreta):

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "android-lab"
+rootProject.name = "gufo-musilab"
 include(":app")

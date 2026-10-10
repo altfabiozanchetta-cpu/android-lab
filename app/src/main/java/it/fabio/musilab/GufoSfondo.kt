@@ -1,4 +1,4 @@
-package it.fabio.hello
+package it.fabio.musilab
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable

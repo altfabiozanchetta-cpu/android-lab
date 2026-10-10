@@ -1,4 +1,4 @@
-package it.fabio.hello
+package it.fabio.musilab
 
 import android.os.Bundle
 import android.view.WindowManager
