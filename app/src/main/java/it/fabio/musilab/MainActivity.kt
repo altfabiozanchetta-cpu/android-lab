@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     private val stato = StatoMetronomo()
     private val statoScale = StatoScale()
     private val config = StatoConfig()
+    private val circolo = StatoCircolo()
     private lateinit var impostazioni: Impostazioni
     private var modo by mutableStateOf(Modo.METRONOMO)
     private var mostraImpostazioni by mutableStateOf(false)
@@ -97,8 +98,27 @@ class MainActivity : ComponentActivity() {
                         stato = stato,
                         onToggle = { toggle() },
                         onScale = { modo = Modo.SCALE },
+                        onAccordi = {
+                            circolo.tonica = statoScale.tonica
+                            modo = Modo.ACCORDI
+                        },
                         onImpostazioni = { mostraImpostazioni = true }
                     )
+                    Modo.ACCORDI -> {
+                        BackHandler { modo = Modo.METRONOMO }
+                        CircoloScreen(
+                            circolo = circolo,
+                            onIndietro = { modo = Modo.METRONOMO },
+                            onImpostazioni = { mostraImpostazioni = true },
+                            onEsercitati = {
+                                statoScale.tonica = circolo.tonica
+                                statoScale.tipo = if (circolo.minore) TipoScala.MINORE else TipoScala.MAGGIORE
+                                statoScale.esercizio = if (circolo.settima) Esercizio.QUADRIADI else Esercizio.TRIADI
+                                if (statoScale.ottave < 2) statoScale.ottave = 2
+                                modo = Modo.SCALE
+                            }
+                        )
+                    }
                     Modo.SCALE -> {
                         BackHandler { modo = Modo.METRONOMO }
                         ScaleScreen(
@@ -167,7 +187,13 @@ private fun nomeDivisione(subs: Int): String = when (subs) {
 }
 
 @Composable
-fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> Unit, onImpostazioni: () -> Unit) {
+fun MetronomeScreen(
+    stato: StatoMetronomo,
+    onToggle: () -> Unit,
+    onScale: () -> Unit,
+    onAccordi: () -> Unit,
+    onImpostazioni: () -> Unit
+) {
     val bpm = stato.bpm
     val beats = stato.battiti
     val subs = stato.suddivisioni
@@ -277,17 +303,28 @@ fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> 
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = onScale,
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text("SCALE", fontSize = 16.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onAccordi,
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text("ACCORDI", fontSize = 16.sp)
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Button(
                         onClick = onToggle,
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) {
                         Text(if (playing) "STOP" else "AVVIA", fontSize = 20.sp)
-                    }
-                    OutlinedButton(
-                        onClick = onScale,
-                        modifier = Modifier.height(56.dp)
-                    ) {
-                        Text("SCALE", fontSize = 18.sp)
                     }
                     OutlinedButton(
                         onClick = onImpostazioni,

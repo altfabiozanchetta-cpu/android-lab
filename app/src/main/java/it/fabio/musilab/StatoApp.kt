@@ -33,6 +33,7 @@ class StatoScale {
     var vista by mutableStateOf<Vista?>(null) // null = scelta automatica (telefono o tablet)
     var ottave by mutableIntStateOf(1)
     var diteggiatura by mutableIntStateOf(DITEGGIATURA_AUTO)
+    var esercizio by mutableStateOf(Esercizio.SCALA)
 }
 
 enum class Suono(val nome: String, val click: Boolean, val note: Boolean) {
@@ -47,4 +48,4 @@ class StatoConfig {
     var salvaAllUscita by mutableStateOf(true)
 }
 
-enum class Modo { METRONOMO, SCALE }
+enum class Modo { METRONOMO, SCALE, ACCORDI }

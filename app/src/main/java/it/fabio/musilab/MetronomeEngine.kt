@@ -9,10 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.random.Random
 
 /**
  * Motore del metronomo: un thread scrive in continuo campioni audio (AudioTrack in streaming).
@@ -55,28 +52,6 @@ class MetronomeEngine {
             val t = i.toDouble() / sampleRate
             val env = exp(-t * 90.0)
             (sin(2.0 * PI * freq * t) * env * gain * 32767.0 * 0.9).toInt().toShort()
-        }
-    }
-
-    /**
-     * Corda pizzicata con l'algoritmo di Karplus-Strong: rumore in una linea di ritardo lunga un
-     * periodo, filtrata a ogni giro. È ricca di armonici, così anche le note gravi del basso
-     * si sentono dagli altoparlanti del telefono.
-     */
-    private fun pizzico(midi: Int, n: Int, sampleRate: Int, out: IntArray) {
-        val freq = 440.0 * 2.0.pow((midi - 69) / 12.0)
-        val periodo = (sampleRate / freq - 0.5).roundToInt().coerceAtLeast(2)
-        val corda = DoubleArray(periodo) { Random.nextDouble(-1.0, 1.0) }
-        // Un primo passaggio di filtro ammorbidisce l'attacco.
-        for (i in 1 until periodo) corda[i] = 0.5 * (corda[i] + corda[i - 1])
-        val smorzamento = 0.996
-        val dissolvenza = (sampleRate * 0.004).toInt()
-        for (i in 0 until n) {
-            val j = i % periodo
-            val v = corda[j]
-            corda[j] = smorzamento * 0.5 * (v + corda[(j + 1) % periodo])
-            val inviluppo = if (i >= n - dissolvenza) (n - i).toDouble() / dissolvenza else 1.0
-            out[i] += (v * inviluppo * 32767.0 * 0.55).toInt()
         }
     }
 
@@ -145,7 +120,7 @@ class MetronomeEngine {
                     val gain = if (nota != null) 0.7 else 1.0
                     for (i in 0 until min(click.size, n)) mix[i] = (click[i] * gain).toInt()
                 }
-                if (nota != null) pizzico(nota, n, sampleRate, mix)
+                if (nota != null) Sintesi.pizzico(nota, n, mix)
                 val buf = ShortArray(n) { mix[it].coerceIn(-32768, 32767).toShort() }
 
                 handler.postDelayed({

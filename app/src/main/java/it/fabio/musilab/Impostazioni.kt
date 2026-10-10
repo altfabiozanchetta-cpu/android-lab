@@ -21,6 +21,7 @@ class Impostazioni(context: Context) {
         sc.vista = Vista.entries.firstOrNull { it.name == vista }
         sc.ottave = prefs.getInt("ottave", sc.ottave).coerceIn(1, 3)
         sc.diteggiatura = prefs.getInt("diteggiatura", sc.diteggiatura)
+        sc.esercizio = enumOppure(prefs.getString("esercizio", null), sc.esercizio)
     }
 
     fun salva(m: StatoMetronomo, sc: StatoScale, cfg: StatoConfig) {
@@ -38,6 +39,7 @@ class Impostazioni(context: Context) {
             sc.vista?.let { e.putString("vista", it.name) }
             e.putInt("ottave", sc.ottave)
             e.putInt("diteggiatura", sc.diteggiatura)
+            e.putString("esercizio", sc.esercizio.name)
         }
         e.apply()
     }

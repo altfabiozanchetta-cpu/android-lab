@@ -66,10 +66,13 @@ data class Posizione(val corda: Int, val tasto: Int)
 class Scala(
     val note: List<NotaScala>,        // salita completa, tonica finale compresa
     val posizioni: List<Posizione>,   // diteggiatura della salita
-    val ottave: Int                   // ottave effettive (possono essere meno di quelle chieste)
+    val ottave: Int,                  // ottave effettive (possono essere meno di quelle chieste)
+    esercizio: SequenzaEsercizio
 ) {
-    /** Sequenza da suonare in loop: salita e discesa senza ripetere gli estremi. */
-    val sequenza: List<Int> = note.indices.toList() + note.indices.reversed().drop(1).dropLast(1)
+    /** Sequenza da suonare in loop: indici in [note]. */
+    val sequenza: List<Int> = esercizio.indici
+    val inizioGruppi: Set<Int> = esercizio.inizioGruppi
+    val etichette: Map<Int, String> = esercizio.etichette
 }
 
 /** Tonica più grave suonabile sullo strumento. */
@@ -133,25 +136,31 @@ fun posizioniDisponibili(pc: Int, s: Strumento): List<Int> {
 fun diteggiatureDisponibili(pc: Int, s: Strumento): List<Int> =
     listOf(DITEGGIATURA_AUTO, DITEGGIATURA_3NPC) + posizioniDisponibili(pc, s)
 
+/** Note della scala scritte con la grafia della tonica che usa meno alterazioni. */
+fun noteScritte(pc: Int, tipo: TipoScala, radice: Int, ottave: Int): List<NotaScala> =
+    grafieTonica(pc)
+        .map { scriviNote(it, tipo, radice, ottave) }
+        .minBy { lista -> lista.sumOf { kotlin.math.abs(it.alterazione) + if (kotlin.math.abs(it.alterazione) > 1) 10 else 0 } }
+
 fun costruisciScala(
     pc: Int,
     tipo: TipoScala,
     s: Strumento,
     ottaveRichieste: Int,
-    diteggiatura: Int = DITEGGIATURA_AUTO
+    diteggiatura: Int = DITEGGIATURA_AUTO,
+    esercizio: Esercizio = Esercizio.SCALA
 ): Scala {
     val radice = tonicaMidi(pc, s)
     val ottave = ottaveRichieste.coerceIn(1, ottaveMassime(pc, s))
-    val note = grafieTonica(pc)
-        .map { scriviNote(it, tipo, radice, ottave) }
-        .minBy { lista -> lista.sumOf { kotlin.math.abs(it.alterazione) + if (kotlin.math.abs(it.alterazione) > 1) 10 else 0 } }
+    val note = noteScritte(pc, tipo, radice, ottave)
     val midi = note.map { it.midi }
     val posizioni = when {
         diteggiatura == DITEGGIATURA_3NPC -> treNotePerCorda(midi, s, if (tipo.semitoni.size >= 6) 3 else 2)
         diteggiatura in posizioniDisponibili(pc, s) -> diteggia(midi, s, diteggiatura)
         else -> diteggia(midi, s)
     }
-    return Scala(note, posizioni, ottave)
+    val es = if (esercizio in Esercizio.disponibili(tipo)) esercizio else Esercizio.SCALA
+    return Scala(note, posizioni, ottave, costruisciEsercizio(note, tipo.semitoni.size, es))
 }
 
 /**

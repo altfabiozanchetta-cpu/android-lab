@@ -83,8 +83,8 @@ fun ScaleScreen(
 ) {
     val tablet = LocalConfiguration.current.smallestScreenWidthDp >= 600
     val vista = scale.vista ?: if (tablet) Vista.ENTRAMBI else Vista.SPARTITO
-    val scala = remember(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura) {
-        costruisciScala(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura)
+    val scala = remember(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura, scale.esercizio) {
+        costruisciScala(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura, scale.esercizio)
     }
     // Il motore legge da qui la nota da suonare a ogni tick.
     DisposableEffect(scala) {
@@ -167,6 +167,9 @@ private fun BarraComandi(
             scale.tonica = it.first
         }
         Selettore("Scala", scale.tipo.nome, TipoScala.entries, { it.nome }, 3, 196.dp) { scale.tipo = it }
+        val esercizi = Esercizio.disponibili(scale.tipo)
+        val esercizio = scale.esercizio.takeIf { it in esercizi } ?: Esercizio.SCALA
+        Selettore("Esercizio", esercizio.nome, esercizi, { it.nome }, 2, 210.dp) { scale.esercizio = it }
         Selettore("Strumento", scale.strumento.nome, Strumento.entries, { it.nome }, 2, 150.dp) { scale.strumento = it }
         Selettore("Vista", vista.nome, Vista.entries, { it.nome }, 1, 160.dp) { scale.vista = it }
         Selettore(
@@ -304,14 +307,19 @@ private fun AreaScala(scala: Scala, strumento: Strumento, vista: Vista, passo: I
         scroll.animateScrollTo(obiettivo.coerceIn(0, scroll.maxValue))
     }
 
+    // Con gli accordi si riserva in alto una riga per i loro nomi.
+    val rigaAccordi = if (scala.etichette.isEmpty()) 0.dp else m.rigaNomi + 4.dp
+
     val disegna: DrawScope.(Boolean, (Int) -> Float) -> Unit = { fisso, xNota ->
+        val t0 = rigaAccordi.toPx()
+        val h = size.height - t0
         when (vista) {
-            Vista.SPARTITO -> disegnaSpartito(scala, strumento, passo, 0f, size.height, fisso, m, misuratore, xNota)
-            Vista.TAB -> disegnaTab(scala, strumento, passo, 0f, size.height, true, fisso, m, misuratore, xNota)
+            Vista.SPARTITO -> disegnaSpartito(scala, strumento, passo, t0, h, fisso, m, misuratore, xNota)
+            Vista.TAB -> disegnaTab(scala, strumento, passo, t0, h, true, fisso, m, misuratore, xNota)
             Vista.ENTRAMBI -> {
-                val h1 = size.height * 0.56f
-                disegnaSpartito(scala, strumento, passo, 0f, h1, fisso, m, misuratore, xNota)
-                disegnaTab(scala, strumento, passo, h1, size.height - h1, false, fisso, m, misuratore, xNota)
+                val h1 = h * 0.56f
+                disegnaSpartito(scala, strumento, passo, t0, h1, fisso, m, misuratore, xNota)
+                disegnaTab(scala, strumento, passo, t0 + h1, h - h1, false, fisso, m, misuratore, xNota)
             }
         }
     }
@@ -333,6 +341,26 @@ private fun AreaScala(scala: Scala, strumento: Strumento, vista: Vista, passo: I
                 size = Size(w, size.height - pad),
                 cornerRadius = CornerRadius(10.dp.toPx())
             )
+        }
+
+        // Separatori dei gruppi e nomi degli accordi.
+        val w = m.larghezzaNota.toPx()
+        for (i in scala.inizioGruppi) {
+            if (i == 0) continue
+            val x = xNota(i) - w / 2f
+            drawLine(LINEE.copy(alpha = 0.25f), Offset(x, rigaAccordi.toPx()), Offset(x, size.height - pad), 1.dp.toPx())
+        }
+        for ((i, testo) in scala.etichette) {
+            val gruppoCorrente = passo >= i && scala.inizioGruppi.none { it in (i + 1)..passo }
+            val layout = misuratore.measure(
+                testo,
+                TextStyle(
+                    fontSize = m.testoNomi,
+                    fontWeight = FontWeight.Bold,
+                    color = if (gruppoCorrente) EVIDENZA else TESTO_TENUE
+                )
+            )
+            drawText(layout, topLeft = Offset(xNota(i) - w / 2f + 4.dp.toPx(), pad / 2f + 2.dp.toPx()))
         }
 
         disegna(false, xNota)

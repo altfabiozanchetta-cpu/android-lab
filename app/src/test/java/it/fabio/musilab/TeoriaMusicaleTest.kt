@@ -59,4 +59,39 @@ class TeoriaMusicaleTest {
         println("Posizioni Do chitarra: " + diteggiatureDisponibili(0, Strumento.CHITARRA).map { nomeDiteggiatura(it) })
         println("Ottave max basso 4 in Si: " + ottaveMassime(11, Strumento.BASSO4))
     }
+
+    @Test
+    fun accordiDiatoniciDoMaggiore() {
+        val triadi = accordiDiatonici(0, TipoScala.MAGGIORE, false)
+        assertEquals(listOf("I", "ii", "iii", "IV", "V", "vi", "vii°"), triadi.map { it.romano })
+        assertEquals(listOf("Do", "Rem", "Mim", "Fa", "Sol", "Lam", "Sidim"), triadi.map { it.nome })
+        val quadriadi = accordiDiatonici(0, TipoScala.MAGGIORE, true)
+        assertEquals(listOf("Domaj7", "Rem7", "Mim7", "Famaj7", "Sol7", "Lam7", "Sim7♭5"), quadriadi.map { it.nome })
+        assertEquals(listOf("i", "ii°", "III", "iv", "v", "VI", "VII"), accordiDiatonici(9, TipoScala.MINORE, false).map { it.romano })
+    }
+
+    @Test
+    fun armature() {
+        assertEquals(0, armatura(0, false))
+        assertEquals(3, armatura(9, false))   // La maggiore
+        assertEquals(-4, armatura(8, false))  // La♭ maggiore
+        assertEquals(6, armatura(6, false))   // Fa♯ maggiore
+        assertEquals(-6, armatura(3, true))   // Mi♭ minore
+        assertEquals("Sol♯", nomeTonica(8, true))
+        assertEquals("Re♭", nomeTonica(1, false))
+    }
+
+    @Test
+    fun esercizi() {
+        val terze = costruisciScala(0, TipoScala.MAGGIORE, Strumento.CHITARRA, 1, esercizio = Esercizio.TERZE)
+        assertEquals("Do Mi Re Fa Mi Sol", terze.sequenza.take(6).joinToString(" ") { terze.note[it].nome })
+        val triadi = costruisciScala(0, TipoScala.MAGGIORE, Strumento.CHITARRA, 2, esercizio = Esercizio.TRIADI)
+        assertEquals("ii · Rem", triadi.etichette[3])
+        for (s in Strumento.values()) for (t in TipoScala.values()) for (e in Esercizio.values()) for (o in 1..3) {
+            val sc = costruisciScala(4, t, s, o, esercizio = e)
+            assertTrue(sc.sequenza.isNotEmpty())
+            assertTrue(sc.sequenza.all { it in sc.note.indices })
+            assertTrue(sc.etichette.values.none { it.contains("?") })
+        }
+    }
 }
