@@ -33,7 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,11 +64,15 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                SideEffect {
-                    engine.bpm = stato.bpm
-                    engine.beatsPerBar = stato.battiti
-                    engine.subdivisions = stato.suddivisioni
-                    engine.accentEnabled = stato.accento
+                // Passa al motore ogni modifica delle impostazioni, da qualunque schermata arrivi.
+                LaunchedEffect(Unit) {
+                    snapshotFlow { listOf(stato.bpm, stato.battiti, stato.suddivisioni, if (stato.accento) 1 else 0) }
+                        .collect { (bpm, battiti, suddivisioni, accento) ->
+                            engine.bpm = bpm
+                            engine.beatsPerBar = battiti
+                            engine.subdivisions = suddivisioni
+                            engine.accentEnabled = accento == 1
+                        }
                 }
                 LaunchedEffect(modo) {
                     requestedOrientation = if (modo == Modo.SCALE) {
