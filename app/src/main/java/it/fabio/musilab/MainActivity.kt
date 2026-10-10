@@ -1,8 +1,10 @@
 package it.fabio.musilab
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -30,11 +32,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,35 +50,85 @@ import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private val engine = MetronomeEngine()
-    private var playing by mutableStateOf(false)
+    private val stato = StatoMetronomo()
+    private val statoScale = StatoScale()
+    private var modo by mutableStateOf(Modo.METRONOMO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        engine.onTick = { b, s ->
+            stato.battitoCorrente = b
+            stato.suddivisioneCorrente = s
+            stato.tick++
+        }
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                MetronomeScreen(engine = engine, playing = playing, onToggle = { toggle() })
+                SideEffect {
+                    engine.bpm = stato.bpm
+                    engine.beatsPerBar = stato.battiti
+                    engine.subdivisions = stato.suddivisioni
+                    engine.accentEnabled = stato.accento
+                }
+                LaunchedEffect(modo) {
+                    requestedOrientation = if (modo == Modo.SCALE) {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else if (resources.configuration.smallestScreenWidthDp >= 600) {
+                        // Sui tablet il metronomo ruota liberamente.
+                        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    }
+                }
+                when (modo) {
+                    Modo.METRONOMO -> MetronomeScreen(
+                        stato = stato,
+                        onToggle = { toggle() },
+                        onScale = { modo = Modo.SCALE }
+                    )
+                    Modo.SCALE -> {
+                        BackHandler { modo = Modo.METRONOMO }
+                        ScaleScreen(
+                            stato = stato,
+                            scale = statoScale,
+                            onToggle = { toggle() },
+                            onIndietro = { modo = Modo.METRONOMO }
+                        )
+                    }
+                }
             }
         }
     }
 
     private fun toggle() {
-        if (playing) {
+        if (stato.inRiproduzione) {
             engine.stop()
-            playing = false
+            stato.inRiproduzione = false
+            stato.battitoCorrente = -1
         } else {
+            stato.tick = 0
             engine.start()
-            playing = true
+            stato.inRiproduzione = true
         }
     }
 
     override fun onStop() {
         super.onStop()
-        if (playing) {
-            engine.stop()
-            playing = false
+        if (stato.inRiproduzione) toggle()
+    }
+}
+
+/** Lampeggio degli occhi del gufo: si riaccende a ogni tick. */
+@Composable
+fun rememberLampeggio(stato: StatoMetronomo): Float {
+    val flash = remember { Animatable(0f) }
+    LaunchedEffect(stato.tick) {
+        if (stato.tick > 0) {
+            flash.snapTo(if (stato.suddivisioneCorrente == 0) 1f else 0.45f)
+            flash.animateTo(0f, tween(220))
         }
     }
+    return flash.value
 }
 
 private fun nomeTempo(bpm: Int): String = when {
@@ -99,44 +149,16 @@ private fun nomeDivisione(subs: Int): String = when (subs) {
 }
 
 @Composable
-fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> Unit) {
-    var bpm by remember { mutableIntStateOf(100) }
-    var beats by remember { mutableIntStateOf(4) }
-    var subs by remember { mutableIntStateOf(1) }
-    var accent by remember { mutableStateOf(true) }
-    var curBeat by remember { mutableIntStateOf(-1) }
-    var curSub by remember { mutableIntStateOf(0) }
-    var tickCount by remember { mutableIntStateOf(0) }
-    val flash = remember { Animatable(0f) }
+fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> Unit) {
+    val bpm = stato.bpm
+    val beats = stato.battiti
+    val subs = stato.suddivisioni
+    val accent = stato.accento
+    val curBeat = stato.battitoCorrente
+    val playing = stato.inRiproduzione
+    val flash = rememberLampeggio(stato)
 
-    SideEffect {
-        engine.bpm = bpm
-        engine.beatsPerBar = beats
-        engine.subdivisions = subs
-        engine.accentEnabled = accent
-    }
-
-    DisposableEffect(engine) {
-        engine.onTick = { b, s ->
-            curBeat = b
-            curSub = s
-            tickCount++
-        }
-        onDispose { engine.onTick = null }
-    }
-
-    LaunchedEffect(playing) {
-        if (!playing) curBeat = -1
-    }
-
-    LaunchedEffect(tickCount) {
-        if (tickCount > 0) {
-            flash.snapTo(if (curSub == 0) 1f else 0.45f)
-            flash.animateTo(0f, tween(220))
-        }
-    }
-
-    val isAccent = accent && curBeat == 0 && curSub == 0
+    val isAccent = accent && curBeat == 0 && stato.suddivisioneCorrente == 0
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -146,7 +168,7 @@ fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> U
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             GufoSfondo(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                flash = flash.value,
+                flash = flash,
                 accent = isAccent
             )
 
@@ -190,18 +212,18 @@ fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> U
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
-                        onClick = { bpm = (bpm - 1).coerceAtLeast(30) },
+                        onClick = { stato.bpm = (bpm - 1).coerceAtLeast(30) },
                         modifier = Modifier.width(52.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) { Text("−") }
                     Slider(
                         value = bpm.toFloat(),
-                        onValueChange = { bpm = it.roundToInt() },
+                        onValueChange = { stato.bpm = it.roundToInt() },
                         valueRange = 30f..240f,
                         modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                     )
                     OutlinedButton(
-                        onClick = { bpm = (bpm + 1).coerceAtMost(240) },
+                        onClick = { stato.bpm = (bpm + 1).coerceAtMost(240) },
                         modifier = Modifier.width(52.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) { Text("+") }
@@ -212,7 +234,7 @@ fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> U
                     value = beats,
                     minV = 1,
                     maxV = 12,
-                    onChange = { beats = it }
+                    onChange = { stato.battiti = it }
                 )
 
                 Row(
@@ -220,7 +242,7 @@ fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> U
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Accento sul primo battito", modifier = Modifier.weight(1f))
-                    Switch(checked = accent, onCheckedChange = { accent = it })
+                    Switch(checked = accent, onCheckedChange = { stato.accento = it })
                 }
 
                 Text("Divisioni per battito: ${nomeDivisione(subs)}")
@@ -229,15 +251,26 @@ fun MetronomeScreen(engine: MetronomeEngine, playing: Boolean, onToggle: () -> U
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     for (n in 1..4) {
-                        DivButton(label = "$n", selected = subs == n, onClick = { subs = n })
+                        DivButton(label = "$n", selected = subs == n, onClick = { stato.suddivisioni = n })
                     }
                 }
 
-                Button(
-                    onClick = onToggle,
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(if (playing) "STOP" else "AVVIA", fontSize = 20.sp)
+                    Button(
+                        onClick = onToggle,
+                        modifier = Modifier.weight(1f).height(56.dp)
+                    ) {
+                        Text(if (playing) "STOP" else "AVVIA", fontSize = 20.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onScale,
+                        modifier = Modifier.height(56.dp)
+                    ) {
+                        Text("SCALE", fontSize = 18.sp)
+                    }
                 }
             }
         }
