@@ -105,13 +105,73 @@ private fun scriviNote(tonica: Pair<Int, Int>, tipo: TipoScala, radice: Int, ott
     }
 }
 
-fun costruisciScala(pc: Int, tipo: TipoScala, s: Strumento, ottaveRichieste: Int): Scala {
+/** Valori speciali della diteggiatura; i valori da 1 in su sono le posizioni della mano. */
+const val DITEGGIATURA_AUTO = -1
+const val DITEGGIATURA_3NPC = 0
+
+fun nomeDiteggiatura(d: Int): String = when (d) {
+    DITEGGIATURA_AUTO -> "Automatica"
+    DITEGGIATURA_3NPC -> "3 note per corda"
+    else -> "Posizione ${romano(d)}"
+}
+
+private fun romano(n: Int): String {
+    val valori = listOf(10 to "X", 9 to "IX", 5 to "V", 4 to "IV", 1 to "I")
+    var r = n
+    val sb = StringBuilder()
+    for ((v, s) in valori) while (r >= v) { sb.append(s); r -= v }
+    return sb.toString()
+}
+
+/** Posizioni della mano (indice sul tasto P) da cui si può suonare la tonica di partenza. */
+fun posizioniDisponibili(pc: Int, s: Strumento): List<Int> {
+    val radice = Posizione(0, tonicaMidi(pc, s) - s.corde[0])
+    return (1..s.tasti - 3).filter { costoNota(radice, it) < Double.POSITIVE_INFINITY }
+}
+
+/** Opzioni del selettore di diteggiatura per la tonalità e lo strumento scelti. */
+fun diteggiatureDisponibili(pc: Int, s: Strumento): List<Int> =
+    listOf(DITEGGIATURA_AUTO, DITEGGIATURA_3NPC) + posizioniDisponibili(pc, s)
+
+fun costruisciScala(
+    pc: Int,
+    tipo: TipoScala,
+    s: Strumento,
+    ottaveRichieste: Int,
+    diteggiatura: Int = DITEGGIATURA_AUTO
+): Scala {
     val radice = tonicaMidi(pc, s)
     val ottave = ottaveRichieste.coerceIn(1, ottaveMassime(pc, s))
     val note = grafieTonica(pc)
         .map { scriviNote(it, tipo, radice, ottave) }
         .minBy { lista -> lista.sumOf { kotlin.math.abs(it.alterazione) + if (kotlin.math.abs(it.alterazione) > 1) 10 else 0 } }
-    return Scala(note, diteggia(note.map { it.midi }, s), ottave)
+    val midi = note.map { it.midi }
+    val posizioni = when {
+        diteggiatura == DITEGGIATURA_3NPC -> treNotePerCorda(midi, s, if (tipo.semitoni.size >= 6) 3 else 2)
+        diteggiatura in posizioniDisponibili(pc, s) -> diteggia(midi, s, diteggiatura)
+        else -> diteggia(midi, s)
+    }
+    return Scala(note, posizioni, ottave)
+}
+
+/**
+ * Diteggiatura "N note per corda": si sale di corda ogni N note partendo dalla più grave;
+ * finite le corde, le note restanti vanno sulla più acuta.
+ */
+fun treNotePerCorda(note: List<Int>, s: Strumento, perCorda: Int): List<Posizione> =
+    note.mapIndexed { i, m ->
+        var c = minOf(i / perCorda, s.corde.size - 1)
+        // Sicurezza: se la nota fosse sotto la corda vuota, si torna alla corda utile più acuta.
+        while (c > 0 && m - s.corde[c] < 0) c--
+        Posizione(c, m - s.corde[c])
+    }
+
+/** Costo di una nota con la mano in posizione P: un dito per tasto da P a P+3. */
+private fun costoNota(p: Posizione, mano: Int): Double = when {
+    p.tasto == 0 -> if (mano <= 5) 0.8 else 3.0
+    p.tasto in mano..mano + 3 -> 0.0
+    p.tasto == mano - 1 || p.tasto == mano + 4 -> 1.0
+    else -> Double.POSITIVE_INFINITY
 }
 
 /**
@@ -119,8 +179,9 @@ fun costruisciScala(pc: Int, tipo: TipoScala, s: Strumento, ottaveRichieste: Int
  * Stato = (posizione sulla tastiera, posizione della mano P): la mano copre i tasti P..P+3
  * (un dito per tasto), con allungamento di un tasto a costo extra. I cambi di posizione costano,
  * le corde si percorrono solo dalla grave all'acuta. Si minimizza il costo totale.
+ * Con [manoIniziale] la scala parte obbligatoriamente da quella posizione.
  */
-fun diteggia(note: List<Int>, s: Strumento): List<Posizione> {
+fun diteggia(note: List<Int>, s: Strumento, manoIniziale: Int? = null): List<Posizione> {
     if (note.isEmpty()) return emptyList()
     val maxP = s.tasti - 3
     val cand = note.map { m ->
@@ -130,19 +191,13 @@ fun diteggia(note: List<Int>, s: Strumento): List<Posizione> {
         }
     }
 
-    fun costoNota(p: Posizione, mano: Int): Double = when {
-        p.tasto == 0 -> if (mano <= 5) 0.8 else 3.0
-        p.tasto in mano..mano + 3 -> 0.0
-        p.tasto == mano - 1 || p.tasto == mano + 4 -> 1.0
-        else -> Double.POSITIVE_INFINITY
-    }
-
     val inf = Double.POSITIVE_INFINITY
     // costo[i][j][P]
     val costo = Array(note.size) { i -> Array(cand[i].size) { DoubleArray(maxP + 1) { inf } } }
     val da = Array(note.size) { i -> Array(cand[i].size) { IntArray(maxP + 1) { -1 } } }
 
     for ((j, p) in cand[0].withIndex()) for (mano in 1..maxP) {
+        if (manoIniziale != null && mano != manoIniziale) continue
         val c = costoNota(p, mano)
         if (c < inf) costo[0][j][mano] = c + p.corda * 0.5 + mano * 0.02
     }

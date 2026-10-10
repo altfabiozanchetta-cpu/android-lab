@@ -29,8 +29,9 @@ class TeoriaMusicaleTest {
 
     @Test
     fun diteggiaturaCorretta() {
-        for (s in Strumento.values()) for (t in TipoScala.values()) for (pc in 0..11) for (o in 1..3) {
-            val sc = costruisciScala(pc, t, s, o)
+        for (s in Strumento.values()) for (t in TipoScala.values()) for (pc in 0..11) for (o in 1..3)
+        for (d in diteggiatureDisponibili(pc, s)) {
+            val sc = costruisciScala(pc, t, s, o, d)
             assertEquals(sc.note.size, sc.posizioni.size)
             sc.note.zip(sc.posizioni).forEach { (n, p) ->
                 assertEquals("$s $t $pc", n.midi, s.corde[p.corda] + p.tasto)
@@ -51,6 +52,11 @@ class TeoriaMusicaleTest {
             println("${s.nome} ${TONICHE[pc].second} magg. ${sc.ottave} ott.: " +
                 sc.note.zip(sc.posizioni).joinToString(" ") { (n, p) -> "${n.nome}=${s.nomiCorde[p.corda]}${p.tasto}" })
         }
+        val box = costruisciScala(9, TipoScala.PENTA_MINORE, Strumento.CHITARRA, 2, 5)
+        println("La pent. min. posizione V: " + box.posizioni.joinToString(" ") { "${Strumento.CHITARRA.nomiCorde[it.corda]}${it.tasto}" })
+        val tnpc = costruisciScala(0, TipoScala.MAGGIORE, Strumento.BASSO6, 2, DITEGGIATURA_3NPC)
+        println("Do magg. basso 6, 3 note per corda: " + tnpc.posizioni.joinToString(" ") { "${Strumento.BASSO6.nomiCorde[it.corda]}${it.tasto}" })
+        println("Posizioni Do chitarra: " + diteggiatureDisponibili(0, Strumento.CHITARRA).map { nomeDiteggiatura(it) })
         println("Ottave max basso 4 in Si: " + ottaveMassime(11, Strumento.BASSO4))
     }
 }

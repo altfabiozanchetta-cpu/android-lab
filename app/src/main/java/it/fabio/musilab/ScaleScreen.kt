@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,11 +74,22 @@ private val EVIDENZA = Color(0xFFFFC93C)
  * spartito e/o tablatura. La nota corrente si illumina a ogni tick del metronomo.
  */
 @Composable
-fun ScaleScreen(stato: StatoMetronomo, scale: StatoScale, onToggle: () -> Unit, onIndietro: () -> Unit) {
+fun ScaleScreen(
+    stato: StatoMetronomo,
+    scale: StatoScale,
+    onToggle: () -> Unit,
+    onIndietro: () -> Unit,
+    onImpostazioni: () -> Unit
+) {
     val tablet = LocalConfiguration.current.smallestScreenWidthDp >= 600
     val vista = scale.vista ?: if (tablet) Vista.ENTRAMBI else Vista.SPARTITO
-    val scala = remember(scale.tonica, scale.tipo, scale.strumento, scale.ottave) {
-        costruisciScala(scale.tonica, scale.tipo, scale.strumento, scale.ottave)
+    val scala = remember(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura) {
+        costruisciScala(scale.tonica, scale.tipo, scale.strumento, scale.ottave, scale.diteggiatura)
+    }
+    // Il motore legge da qui la nota da suonare a ogni tick.
+    DisposableEffect(scala) {
+        stato.sequenzaMidi = scala.sequenza.map { scala.note[it].midi }.toIntArray()
+        onDispose { stato.sequenzaMidi = null }
     }
     val passi = scala.sequenza.size
     val passo = if (stato.inRiproduzione && stato.tick > 0) (stato.tick - 1) % passi else -1
@@ -85,7 +97,7 @@ fun ScaleScreen(stato: StatoMetronomo, scale: StatoScale, onToggle: () -> Unit, 
 
     Surface(modifier = Modifier.fillMaxSize(), color = SFONDO, contentColor = Color.White) {
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            BarraComandi(stato, scale, scala, vista, tablet, flash, onToggle, onIndietro)
+            BarraComandi(stato, scale, scala, vista, tablet, flash, onToggle, onIndietro, onImpostazioni)
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
@@ -108,7 +120,8 @@ private fun BarraComandi(
     tablet: Boolean,
     flash: Float,
     onToggle: () -> Unit,
-    onIndietro: () -> Unit
+    onIndietro: () -> Unit,
+    onImpostazioni: () -> Unit
 ) {
     val altezza = if (tablet) 72.dp else 60.dp
     Row(
@@ -125,6 +138,11 @@ private fun BarraComandi(
             modifier = Modifier.size(44.dp),
             contentPadding = PaddingValues(0.dp)
         ) { Text("←", fontSize = 20.sp) }
+        OutlinedButton(
+            onClick = onImpostazioni,
+            modifier = Modifier.size(44.dp),
+            contentPadding = PaddingValues(0.dp)
+        ) { Text("⚙", fontSize = 18.sp) }
 
         GufoSfondo(
             modifier = Modifier.size(altezza - 4.dp),
@@ -159,6 +177,11 @@ private fun BarraComandi(
             3,
             48.dp
         ) { scale.ottave = it }
+        val diteggiature = diteggiatureDisponibili(scale.tonica, scale.strumento)
+        val diteggiatura = scale.diteggiatura.takeIf { it in diteggiature } ?: DITEGGIATURA_AUTO
+        Selettore("Diteggiatura", nomeDiteggiatura(diteggiatura), diteggiature, { nomeDiteggiatura(it) }, 2, 170.dp) {
+            scale.diteggiatura = it
+        }
         Selettore("Note per battito", "${stato.suddivisioni}", (1..4).toList(), { "$it" }, 4, 48.dp) {
             stato.suddivisioni = it
         }

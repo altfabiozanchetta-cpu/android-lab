@@ -12,8 +12,8 @@ android {
         applicationId = "it.fabio.musilab"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
     }
 
     // Chiave fissa SOLO per le prove di laboratorio (non è segreta):

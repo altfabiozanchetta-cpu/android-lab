@@ -52,11 +52,17 @@ class MainActivity : ComponentActivity() {
     private val engine = MetronomeEngine()
     private val stato = StatoMetronomo()
     private val statoScale = StatoScale()
+    private val config = StatoConfig()
+    private lateinit var impostazioni: Impostazioni
     private var modo by mutableStateOf(Modo.METRONOMO)
+    private var mostraImpostazioni by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        impostazioni = Impostazioni(this)
+        impostazioni.carica(stato, statoScale, config)
+        engine.notaPerTick = { k -> stato.sequenzaMidi?.let { it[k % it.size] } }
         engine.onTick = { b, s ->
             stato.battitoCorrente = b
             stato.suddivisioneCorrente = s
@@ -66,13 +72,15 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 // Passa al motore ogni modifica delle impostazioni, da qualunque schermata arrivi.
                 LaunchedEffect(Unit) {
-                    snapshotFlow { listOf(stato.bpm, stato.battiti, stato.suddivisioni, if (stato.accento) 1 else 0) }
-                        .collect { (bpm, battiti, suddivisioni, accento) ->
-                            engine.bpm = bpm
-                            engine.beatsPerBar = battiti
-                            engine.subdivisions = suddivisioni
-                            engine.accentEnabled = accento == 1
-                        }
+                    snapshotFlow {
+                        listOf(stato.bpm, stato.battiti, stato.suddivisioni, if (stato.accento) 1 else 0, config.suono.ordinal)
+                    }.collect { (bpm, battiti, suddivisioni, accento, suono) ->
+                        engine.bpm = bpm
+                        engine.beatsPerBar = battiti
+                        engine.subdivisions = suddivisioni
+                        engine.accentEnabled = accento == 1
+                        engine.suono = Suono.entries[suono]
+                    }
                 }
                 LaunchedEffect(modo) {
                     requestedOrientation = if (modo == Modo.SCALE) {
@@ -88,7 +96,8 @@ class MainActivity : ComponentActivity() {
                     Modo.METRONOMO -> MetronomeScreen(
                         stato = stato,
                         onToggle = { toggle() },
-                        onScale = { modo = Modo.SCALE }
+                        onScale = { modo = Modo.SCALE },
+                        onImpostazioni = { mostraImpostazioni = true }
                     )
                     Modo.SCALE -> {
                         BackHandler { modo = Modo.METRONOMO }
@@ -96,9 +105,13 @@ class MainActivity : ComponentActivity() {
                             stato = stato,
                             scale = statoScale,
                             onToggle = { toggle() },
-                            onIndietro = { modo = Modo.METRONOMO }
+                            onIndietro = { modo = Modo.METRONOMO },
+                            onImpostazioni = { mostraImpostazioni = true }
                         )
                     }
+                }
+                if (mostraImpostazioni) {
+                    DialogoImpostazioni(config) { mostraImpostazioni = false }
                 }
             }
         }
@@ -118,6 +131,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        impostazioni.salva(stato, statoScale, config)
         if (stato.inRiproduzione) toggle()
     }
 }
@@ -153,7 +167,7 @@ private fun nomeDivisione(subs: Int): String = when (subs) {
 }
 
 @Composable
-fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> Unit) {
+fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> Unit, onImpostazioni: () -> Unit) {
     val bpm = stato.bpm
     val beats = stato.battiti
     val subs = stato.suddivisioni
@@ -274,6 +288,13 @@ fun MetronomeScreen(stato: StatoMetronomo, onToggle: () -> Unit, onScale: () -> 
                         modifier = Modifier.height(56.dp)
                     ) {
                         Text("SCALE", fontSize = 18.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onImpostazioni,
+                        modifier = Modifier.size(56.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("⚙", fontSize = 22.sp)
                     }
                 }
             }
